@@ -1,0 +1,56 @@
+{
+  "Actions": [
+    {
+      "Icon": "static/counter-icon.png",
+      "Name": "Counter",
+      "DisableAutomaticStates": true,
+      "States": [
+        {
+          "TitleAlignment": "center",
+          "FontSize": "42",
+          "Image": "static/background.png"
+        }
+      ],
+      "Settings": {
+        "count": 0,
+        "obsEnabled": false,
+        "obsWebSocketUrl": "ws://localhost:4455",
+        "obsWebSocketPassword": "",
+        "obsTextSourceName": "CounterText"
+      },
+      "Controllers": [],
+      "UserTitleEnabled": true,
+      "SupportedInMultiActions": false,
+      "Tooltip": "Counter plugin - click to increment, long press to reset",
+      "UUID": "com.linkit.streamerdeck.counter.counter",
+      "PropertyInspectorPath": "propertyInspector/counter/index.html"
+    }
+  ],
+  "SDKVersion": 1,
+  "Author": "LinkIT",
+  "Name": "Counter",
+  "Icon": "static/counter-icon.png",
+  "CodePathWin": "plugin/index.js",
+  "CodePathMac": "plugin/index.js",
+  "Description": "Counter plugin with OBS integration",
+  "Category": "StreamerDeck",
+  "CategoryIcon": "static/counter-icon.png",
+  "Version": "1.0.0",
+  "URL": "https://github.com/Devisione/Mirabox-StreamerDeck",
+  "OS": [
+    {
+      "Platform": "mac",
+      "MinimumVersion": "10.11"
+    },
+    {
+      "Platform": "windows",
+      "MinimumVersion": "7"
+    }
+  ],
+  "Software": {
+    "MinimumVersion": "3.10.188.226"
+  },
+  "Nodejs": {
+    "Version": "20"
+  }
+}

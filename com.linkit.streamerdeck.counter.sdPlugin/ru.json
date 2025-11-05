@@ -1,0 +1,31 @@
+{
+  "Name": "Счётчик",
+  "Description": "Плагин-счётчик с интеграцией OBS",
+  "Category": "StreamerDeck",
+  "com.linkit.streamerdeck.counter.counter": {
+    "Name": "Счётчик",
+    "Tooltip": "Плагин-счётчик - нажмите для увеличения, зажмите для сброса"
+  },
+  "Localization": {
+    "counter.currentValue": "Текущее значение счётчика",
+    "counter.manualSetHint": "Можно вручную установить значение счётчика",
+    "counter.obsWebSocketSettings": "Настройки OBS WebSocket",
+    "counter.enableOBS": "Включить отправку в OBS",
+    "counter.enableOBSHint": "Если включено, значение счётчика будет автоматически отправляться в OBS",
+    "counter.obsWebSocketURL": "OBS WebSocket URL",
+    "counter.obsWebSocketURLHint": "URL для подключения к OBS WebSocket",
+    "counter.obsWebSocketPassword": "OBS WebSocket Password",
+    "counter.passwordPlaceholder": "Пароль (если требуется)",
+    "counter.obsWebSocketPasswordHint": "Пароль для OBS WebSocket (обычно не требуется)",
+    "counter.obsTextSourceName": "Название текстового источника в OBS",
+    "counter.obsTextSourceNameHint": "Название текстового источника, который будет обновляться автоматически",
+    "counter.instruction": "Инструкция:",
+    "counter.click": "Нажатие:",
+    "counter.clickHint": "увеличивает счётчик на +1",
+    "counter.longPress": "Длительное нажатие (3+ сек):",
+    "counter.longPressHint": "сбрасывает счётчик до 0",
+    "counter.longPressHint3sec": "сбрасывает счётчик до 0",
+    "counter.obsTextSource": "OBS Text Source:",
+    "counter.obsTextSourceHint": "Создайте текстовый источник с указанным именем для автоматического обновления"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "Name": "Counter",
+  "Description": "Counter plugin with OBS integration",
+  "Category": "StreamerDeck",
+  "com.linkit.streamerdeck.counter.counter": {
+    "Name": "Counter",
+    "Tooltip": "Counter plugin - click to increment, long press to reset"
+  },
+  "Localization": {
+    "counter.currentValue": "Current Counter Value",
+    "counter.manualSetHint": "You can manually set the counter value",
+    "counter.obsWebSocketSettings": "OBS WebSocket Settings",
+    "counter.enableOBS": "Enable OBS Integration",
+    "counter.enableOBSHint": "If enabled, the counter value will be automatically sent to OBS",
+    "counter.obsWebSocketURL": "OBS WebSocket URL",
+    "counter.obsWebSocketURLHint": "URL to connect to OBS WebSocket",
+    "counter.obsWebSocketPassword": "OBS WebSocket Password",
+    "counter.passwordPlaceholder": "Password (if required)",
+    "counter.obsWebSocketPasswordHint": "Password for OBS WebSocket (usually not required)",
+    "counter.obsTextSourceName": "OBS Text Source Name",
+    "counter.obsTextSourceNameHint": "Name of text source that will be updated automatically",
+    "counter.instruction": "Instruction:",
+    "counter.click": "Click:",
+    "counter.clickHint": "increments counter by +1",
+    "counter.longPress": "Long press (3+ sec):",
+    "counter.longPressHint": "resets counter to 0",
+    "counter.longPressHint3sec": "resets counter to 0",
+    "counter.obsTextSource": "OBS Text Source:",
+    "counter.obsTextSourceHint": "Create text source with specified name for automatic updates"
+  }
+}

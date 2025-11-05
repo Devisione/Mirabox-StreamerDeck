@@ -5,6 +5,8 @@ const crypto = require('crypto');
 const plugin = new Plugins('counter');
 
 log.info('Plugin initialized');
+log.info('Plugin process PID:', process.pid);
+log.info('Plugin will keep running in background');
 
 let counterContexts = {};
 let longPressTimers = {};
@@ -12,13 +14,27 @@ let currentContexts = {};
 let settingsCache = {};
 
 // OBS WebSocket соединения для каждого контекста
-let obsConnections = {}; // { context: { ws, textSourceName, connected, enabled, authenticated } }
+let obsConnections = {}; // { context: { ws, textSourceName, connected, enabled, authenticated, url } }
+let connectionCheckInterval = null; // Интервал для периодической проверки подключений
+
+// Обновление всех контекстов с одинаковым OBS URL при успешном подключении
+function updateAllContextsWithSameURL(url) {
+    Object.keys(settingsCache).forEach(context => {
+        const settings = settingsCache[context];
+        if (settings && settings.obsEnabled && settings.obsWebSocketUrl === url) {
+            updateButtonDisplay(context);
+        }
+    });
+}
 
 // Подключение к OBS WebSocket 5.x с правильной аутентификацией
 function connectToOBS(context, url, password, textSourceName) {
+    log.info(`[${context}] Starting OBS connection to ${url}`);
+    
     // Закрываем старое соединение если есть
     if (obsConnections[context] && obsConnections[context].ws) {
         if (obsConnections[context].ws.readyState === WebSocket.OPEN) {
+            log.info(`[${context}] Closing existing OBS connection`);
             obsConnections[context].ws.close();
         }
         delete obsConnections[context];
@@ -30,27 +46,34 @@ function connectToOBS(context, url, password, textSourceName) {
         authenticated: false,
         enabled: true,
         ws: null,
-        password: password || ''
+        password: password || '',
+        url: url
     };
     
     try {
+        log.info(`[${context}] Creating WebSocket connection to OBS: ${url}`);
         const ws = new WebSocket(url);
         obsConnections[context].ws = ws;
 
         ws.on('open', () => {
-            log.info(`[${context}] OBS WebSocket opened`);
+            log.info(`[${context}] OBS WebSocket opened successfully`);
+            log.info(`[${context}] Active OBS connections count: ${Object.keys(obsConnections).length}`);
         });
 
         ws.on('error', (error) => {
             log.error(`[${context}] OBS WebSocket error:`, error);
             obsConnections[context].connected = false;
             obsConnections[context].authenticated = false;
+            // Обновляем отображение для всех контекстов с тем же OBS URL
+            updateAllContextsWithSameURL(url);
         });
 
         ws.on('close', () => {
             log.info(`[${context}] OBS WebSocket closed`);
             obsConnections[context].connected = false;
             obsConnections[context].authenticated = false;
+            // Обновляем отображение для всех контекстов с тем же OBS URL
+            updateAllContextsWithSameURL(url);
         });
         
         ws.on('message', (data) => {
@@ -112,6 +135,10 @@ function connectToOBS(context, url, password, textSourceName) {
                     log.info(`[${context}] Successfully authenticated with OBS`);
                     obsConnections[context].connected = true;
                     obsConnections[context].authenticated = true;
+                    // Обновляем отображение для всех контекстов с тем же OBS URL
+                    if (obsConnections[context] && obsConnections[context].url) {
+                        updateAllContextsWithSameURL(obsConnections[context].url);
+                    }
                 } else if (message.op === 8) {
                     // Event - события от OBS
                     log.info(`[${context}] OBS Event:`, message.d);
@@ -125,8 +152,11 @@ function connectToOBS(context, url, password, textSourceName) {
         });
     } catch (error) {
         log.error(`[${context}] Error creating OBS WebSocket:`, error);
+        log.error(`[${context}] Error stack:`, error.stack);
         obsConnections[context].connected = false;
         obsConnections[context].authenticated = false;
+        // Обновляем отображение для всех контекстов с тем же OBS URL
+        updateAllContextsWithSameURL(url);
     }
 }
 
@@ -174,6 +204,114 @@ function updateOBSTextSource(context) {
     }
 }
 
+// Проверка подключения для конкретного контекста
+function checkConnectionForContext(context) {
+    const settings = settingsCache[context];
+    if (!settings || !settings.obsEnabled) {
+        return; // OBS не включен для этого контекста
+    }
+    
+    const conn = obsConnections[context];
+    
+    // Если соединения нет или оно не аутентифицировано, пытаемся подключиться
+    if (!conn || !conn.authenticated) {
+        if (settings.obsWebSocketUrl && settings.obsTextSourceName) {
+            log.info(`[${context}] Reconnecting to OBS (periodic check)`);
+            connectToOBS(
+                context,
+                settings.obsWebSocketUrl,
+                settings.obsWebSocketPassword || '',
+                settings.obsTextSourceName
+            );
+        }
+    } else if (conn && conn.ws) {
+        // Проверяем состояние соединения
+        if (conn.ws.readyState !== WebSocket.OPEN) {
+            log.info(`[${context}] Connection is not open (state: ${conn.ws.readyState}), reconnecting`);
+            conn.connected = false;
+            conn.authenticated = false;
+            if (settings.obsWebSocketUrl && settings.obsTextSourceName) {
+                connectToOBS(
+                    context,
+                    settings.obsWebSocketUrl,
+                    settings.obsWebSocketPassword || '',
+                    settings.obsTextSourceName
+                );
+            }
+        }
+    }
+}
+
+// Функция для логирования состояния всех соединений
+function logConnectionStatus() {
+    const contexts = Object.keys(settingsCache);
+    const connections = Object.keys(obsConnections);
+    
+    log.info('=== Connection Status ===');
+    log.info(`Active contexts: ${contexts.length}`);
+    log.info(`Active OBS connections: ${connections.length}`);
+    
+    contexts.forEach(context => {
+        const settings = settingsCache[context];
+        const conn = obsConnections[context];
+        
+        log.info(`Context ${context}:`);
+        log.info(`  - OBS enabled: ${settings?.obsEnabled}`);
+        log.info(`  - OBS URL: ${settings?.obsWebSocketUrl}`);
+        log.info(`  - Connection exists: ${!!conn}`);
+        
+        if (conn) {
+            const wsState = conn.ws ? conn.ws.readyState : 'N/A';
+            const wsStateNames = {
+                0: 'CONNECTING',
+                1: 'OPEN',
+                2: 'CLOSING',
+                3: 'CLOSED'
+            };
+            log.info(`  - WebSocket state: ${wsStateNames[wsState] || wsState}`);
+            log.info(`  - Authenticated: ${conn.authenticated}`);
+            log.info(`  - Connected: ${conn.connected}`);
+        }
+    });
+    log.info('=== End Connection Status ===');
+}
+
+// Периодическая проверка всех подключений
+function startConnectionCheckInterval() {
+    if (connectionCheckInterval) {
+        log.info('Connection check interval already running');
+        return; // Интервал уже запущен
+    }
+    
+    log.info('Starting periodic OBS connection check interval (every 12 seconds)');
+    logConnectionStatus();
+    
+    connectionCheckInterval = setInterval(() => {
+        const activeContexts = Object.keys(settingsCache).length;
+        const activeConnections = Object.keys(obsConnections).length;
+        log.info(`Periodic OBS connection check - Contexts: ${activeContexts}, Connections: ${activeConnections}`);
+        
+        Object.keys(settingsCache).forEach(context => {
+            checkConnectionForContext(context);
+        });
+        
+        // Логируем статус каждые 5 проверок (примерно раз в минуту)
+        if (Math.random() < 0.2) {
+            logConnectionStatus();
+        }
+    }, 12000); // Проверка каждые 12 секунд
+    
+    log.info('Started periodic OBS connection check interval');
+}
+
+function stopConnectionCheckInterval() {
+    if (connectionCheckInterval) {
+        clearInterval(connectionCheckInterval);
+        connectionCheckInterval = null;
+        log.info('Stopped periodic OBS connection check interval');
+    }
+}
+
 function updateButtonDisplay(context) {
     if (!context) {
         log.error('updateButtonDisplay called without context');
@@ -185,7 +323,21 @@ function updateButtonDisplay(context) {
     log.info(`[${context}] Updating display, count: ${count}`);
     
     try {
-        plugin.setTitle(context, count.toString());
+        // Проверяем, нужно ли показывать "???"
+        const settings = settingsCache[context];
+        let displayText = count.toString();
+        
+        if (settings && settings.obsEnabled) {
+            // Если OBS включен, проверяем подключение
+            // Проверяем все соединения с тем же URL, так как они могут использовать одно соединение
+            const conn = obsConnections[context];
+            if (!conn || !conn.authenticated) {
+                // OBS включен, но не подключен - показываем "???"
+                displayText = '???';
+            }
+        }
+        
+        plugin.setTitle(context, displayText);
         updateOBSTextSource(context);
         
         if (currentContexts[context]) {
@@ -221,6 +373,8 @@ plugin.counter = new Actions({
     
     async _willAppear({ context, payload }) {
         log.info(`[${context}] _willAppear called`, JSON.stringify(payload));
+        log.info(`[${context}] Plugin process PID: ${process.pid}`);
+        log.info(`[${context}] This plugin instance will work in background`);
         
         const settings = payload.settings || {};
         
@@ -235,15 +389,22 @@ plugin.counter = new Actions({
         counterContexts[context] = settingsCache[context].count;
         currentContexts[context] = true;
         
+        log.info(`[${context}] Settings loaded - OBS enabled: ${settingsCache[context].obsEnabled}`);
+        
         if (settingsCache[context].obsEnabled && settingsCache[context].obsWebSocketUrl && settingsCache[context].obsTextSourceName) {
-            log.info(`[${context}] Connecting to OBS:`, settingsCache[context].obsWebSocketUrl);
+            log.info(`[${context}] OBS is enabled, connecting to: ${settingsCache[context].obsWebSocketUrl}`);
             connectToOBS(
                 context,
                 settingsCache[context].obsWebSocketUrl,
                 settingsCache[context].obsWebSocketPassword || '',
                 settingsCache[context].obsTextSourceName
             );
+        } else {
+            log.info(`[${context}] OBS is not enabled or settings incomplete`);
         }
+        
+        // Запускаем периодическую проверку подключений, если еще не запущена
+        startConnectionCheckInterval();
         
         updateButtonDisplay(context);
     },
@@ -264,6 +425,11 @@ plugin.counter = new Actions({
         delete counterContexts[context];
         delete currentContexts[context];
         delete settingsCache[context];
+        
+        // Если больше нет активных контекстов, останавливаем периодическую проверку
+        if (Object.keys(settingsCache).length === 0) {
+            stopConnectionCheckInterval();
+        }
     },
     
     _didReceiveSettings({ context, payload }) {
@@ -286,7 +452,7 @@ plugin.counter = new Actions({
         
         if (nowObsEnabled && settingsCache[context].obsWebSocketUrl && settingsCache[context].obsTextSourceName) {
             const urlChanged = !obsConnections[context] || obsConnections[context].textSourceName !== settingsCache[context].obsTextSourceName ||
-                (obsConnections[context].ws && obsConnections[context].ws.url !== settingsCache[context].obsWebSocketUrl);
+                (obsConnections[context].url && obsConnections[context].url !== settingsCache[context].obsWebSocketUrl);
             
             if (!wasObsEnabled || !obsConnections[context] || !obsConnections[context].authenticated || urlChanged) {
                 log.info(`[${context}] Connecting to OBS:`, settingsCache[context].obsWebSocketUrl);
@@ -302,6 +468,9 @@ plugin.counter = new Actions({
             obsConnections[context].ws.close();
             delete obsConnections[context];
         }
+        
+        // Запускаем периодическую проверку подключений, если еще не запущена
+        startConnectionCheckInterval();
         
         updateButtonDisplay(context);
     },
@@ -333,6 +502,26 @@ plugin.counter = new Actions({
         if (longPressTimers[context]) {
             clearTimeout(longPressTimers[context]);
             delete longPressTimers[context];
+            
+            // Проверяем, нужно ли делать повторное подключение к OBS
+            const settings = settingsCache[context];
+            if (settings && settings.obsEnabled) {
+                const conn = obsConnections[context];
+                if (!conn || !conn.authenticated) {
+                    // OBS включен, но не подключен - делаем повторное подключение
+                    log.info(`[${context}] Reconnecting to OBS on button press`);
+                    if (settings.obsWebSocketUrl && settings.obsTextSourceName) {
+                        connectToOBS(
+                            context,
+                            settings.obsWebSocketUrl,
+                            settings.obsWebSocketPassword || '',
+                            settings.obsTextSourceName
+                        );
+                        // Отображение обновится автоматически при успешной аутентификации
+                    }
+                    return;
+                }
+            }
             
             counterContexts[context] = (counterContexts[context] || 0) + 1;
             
@@ -368,7 +557,19 @@ plugin.counter = new Actions({
     }
 });
 
+// Обработка завершения процесса
 process.on('SIGINT', () => {
+    log.info('SIGINT received, closing OBS connections and exiting');
+    stopConnectionCheckInterval();
+    Object.values(obsConnections).forEach(conn => {
+        if (conn.ws) conn.ws.close();
+    });
+    process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+    log.info('SIGTERM received, closing OBS connections and exiting');
+    stopConnectionCheckInterval();
     Object.values(obsConnections).forEach(conn => {
         if (conn.ws) conn.ws.close();
     });
@@ -377,8 +578,14 @@ process.on('SIGINT', () => {
 
 process.on('uncaughtException', (error) => {
     log.error('Uncaught Exception:', error);
+    log.error('Stack:', error.stack);
 });
 
 process.on('unhandledRejection', (reason) => {
     log.error('Unhandled Rejection:', reason);
 });
+
+// Предотвращаем завершение процесса, если нет активных соединений
+// Плагин должен работать в фоне пока есть активные контексты
+log.info('Plugin process will keep running in background');
+log.info('Process will exit only when StreamDock closes the connection');
